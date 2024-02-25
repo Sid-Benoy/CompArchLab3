@@ -1,6 +1,6 @@
 /*
-    Name 1: Your full name
-    UTEID 1: Your UT EID
+    Name 1: Siddharth Benoy
+    UTEID 1: sb62297
 */
 
 /***************************************************************/
@@ -144,6 +144,9 @@ int MEMORY[WORDS_IN_MEM][2];
 
 int RUN_BIT;	/* run bit */
 int BUS;	/* value of the bus */
+
+int mem_cycle = 0;
+int result = 0;
 
 typedef struct System_Latches_Struct{
 
@@ -582,6 +585,45 @@ void eval_micro_sequencer() {
      * micro sequencer logic. Latch the next microinstruction.
      */
 
+    for(int i = 0; i < CONTROL_STORE_BITS; i++){
+        printf("%d", CURRENT_LATCHES.MICROINSTRUCTION[i]);
+    }
+
+
+
+    if(CURRENT_LATCHES.STATE_NUMBER == 18 || CURRENT_LATCHES.STATE_NUMBER == 19){
+        NEXT_LATCHES.STATE_NUMBER = 33;
+        memcpy(NEXT_LATCHES.MICROINSTRUCTION, CONTROL_STORE[33], sizeof(int)*CONTROL_STORE_BITS);
+        NEXT_LATCHES.PC += 2;
+        return;
+    }
+
+    if(GetIRD(CURRENT_LATCHES.MICROINSTRUCTION) == 1){
+        NEXT_LATCHES.STATE_NUMBER = ((CURRENT_LATCHES.IR) >> 12) & 0x7;
+        printf("%d", NEXT_LATCHES.STATE_NUMBER);
+        memcpy(NEXT_LATCHES.MICROINSTRUCTION, CONTROL_STORE[NEXT_LATCHES.STATE_NUMBER], sizeof(int)*CONTROL_STORE_BITS);
+    }
+
+    else{
+        int j_2 = ((CURRENT_LATCHES.MICROINSTRUCTION[COND1]) & (~CURRENT_LATCHES.MICROINSTRUCTION[COND0])
+                & (CURRENT_LATCHES.BEN));
+        int j_1 = (~CURRENT_LATCHES.MICROINSTRUCTION[COND1] & CURRENT_LATCHES.MICROINSTRUCTION[COND0]
+                                                           & CURRENT_LATCHES.READY);
+        int j_0 = (CURRENT_LATCHES.MICROINSTRUCTION[COND1] & CURRENT_LATCHES.MICROINSTRUCTION[COND0]
+                                                           & ((CURRENT_LATCHES.IR >> 11) & 0x1));
+        int next_state = GetJ(CURRENT_LATCHES.MICROINSTRUCTION) + j_0 + (j_1 << 1) + (j_2 << 2);
+
+        memcpy(NEXT_LATCHES.MICROINSTRUCTION, CONTROL_STORE[next_state], sizeof(int)*CONTROL_STORE_BITS);
+        NEXT_LATCHES.STATE_NUMBER = next_state;
+
+        if(CURRENT_LATCHES.READY == 1)
+            NEXT_LATCHES.READY = 0;
+    }
+
+
+
+
+
 }
 
 
@@ -593,6 +635,13 @@ void cycle_memory() {
      * If fourth, we need to latch Ready bit at the end of
      * cycle to prepare microsequencer for the fifth cycle.
      */
+    if(GetMIO_EN(CURRENT_LATCHES.MICROINSTRUCTION) == 1){
+        mem_cycle++;
+    }
+
+    if(mem_cycle % 4 == 0 && mem_cycle != 0)
+        NEXT_LATCHES.READY = 1;
+
 
 }
 
@@ -609,6 +658,30 @@ void eval_bus_drivers() {
      *		 Gate_SHF,
      *		 Gate_MDR.
      */
+    if(mem_cycle % 5 != 0)
+        return;
+
+    if(GetGATE_MARMUX(CURRENT_LATCHES.MICROINSTRUCTION)){
+        if(CURRENT_LATCHES.STATE_NUMBER == 14){
+            result = ((CURRENT_LATCHES.IR & 0x1FF) << 1) + CURRENT_LATCHES.PC;
+        }
+    }
+
+    if(GetGATE_PC(CURRENT_LATCHES.MICROINSTRUCTION)){
+
+    }
+
+    if(GetGATE_SHF(CURRENT_LATCHES.MICROINSTRUCTION)){
+
+    }
+
+    if(GetGATE_ALU(CURRENT_LATCHES.MICROINSTRUCTION)){
+
+    }
+
+    if(GetGATE_MDR(CURRENT_LATCHES.MICROINSTRUCTION)){
+
+    }
 
 }
 
@@ -619,6 +692,26 @@ void drive_bus() {
      * Datapath routine for driving the bus from one of the 5 possible
      * tristate drivers.
      */
+    BUS = 0;
+
+    if(mem_cycle % 5 != 0)
+        return;
+
+    if(CURRENT_LATCHES.STATE_NUMBER == 18){
+        BUS = CURRENT_LATCHES.PC;
+    }
+
+    if(CURRENT_LATCHES.STATE_NUMBER == 35){
+        BUS = CURRENT_LATCHES.MDR;
+    }
+
+    if(CURRENT_LATCHES.STATE_NUMBER == 5){
+        BUS = result;
+    }
+
+    if(CURRENT_LATCHES.STATE_NUMBER == 14){
+        BUS = result;
+    }
 
 }
 
@@ -631,5 +724,50 @@ void latch_datapath_values() {
      * require sourcing the bus; therefore, this routine has to come
      * after drive_bus.
      */
+    int dest_reg = (CURRENT_LATCHES.IR >> 9) & 0x7;
+    int sourcereg1_baser = (CURRENT_LATCHES.IR >> 6) & 0x7;
+    int sourcereg2 = CURRENT_LATCHES.IR & 0x7;
+
+    if(mem_cycle % 5 != 0)
+        return;
+
+    if(CURRENT_LATCHES.STATE_NUMBER == 18){
+        NEXT_LATCHES.MAR = BUS;
+    }
+
+    if(CURRENT_LATCHES.STATE_NUMBER == 33){
+        NEXT_LATCHES.MDR = (MEMORY[CURRENT_LATCHES.MAR>>1][1] << 8) + MEMORY[CURRENT_LATCHES.MAR>>1][0];
+    }
+
+    if(CURRENT_LATCHES.STATE_NUMBER == 35){
+        NEXT_LATCHES.IR = BUS;
+    }
+
+    if(CURRENT_LATCHES.STATE_NUMBER == 32){
+        int ir_11 = ((CURRENT_LATCHES.IR >> 11) & 0x1);
+        int ir_10 = ((CURRENT_LATCHES.IR >> 10) & 0x1);
+        int ir_9 = ((CURRENT_LATCHES.IR>>9) & 0x1);
+        NEXT_LATCHES.BEN = ((ir_11 & CURRENT_LATCHES.N) || (ir_10 & CURRENT_LATCHES.P) || (ir_9 & CURRENT_LATCHES.N));
+    }
+
+    if(CURRENT_LATCHES.STATE_NUMBER == 1){
+
+    }
+
+    if(CURRENT_LATCHES.STATE_NUMBER == 5){
+        if(((CURRENT_LATCHES.IR >> 5) & 0x1) == 1){
+            NEXT_LATCHES.REGS[dest_reg] = Low16bits(CURRENT_LATCHES.REGS[sourcereg1_baser] & (CURRENT_LATCHES.IR & 0x1F));
+        }else
+            NEXT_LATCHES.REGS[dest_reg] = Low16bits(CURRENT_LATCHES.REGS[sourcereg1_baser] & CURRENT_LATCHES.REGS[sourcereg2]);
+
+    }
+
+    if(CURRENT_LATCHES.STATE_NUMBER == 14){
+        NEXT_LATCHES.REGS[dest_reg] = Low16bits(BUS);
+    }
+}
+
+void setCC(int number){
+
 
 }
