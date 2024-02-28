@@ -820,9 +820,14 @@ void latch_datapath_values() {
      */
     int dest_reg = (CURRENT_LATCHES.IR >> 9) & 0x7;
     int sourcereg_1 = (CURRENT_LATCHES.IR >> 6) & 0x7;
+    short neg_number_bus;
+
+
 
     if(mem_cycle % 5 != 0)
         return;
+
+
 
     if(GetLD_PC(CURRENT_LATCHES.MICROINSTRUCTION)){
         if(GetLD_MAR(CURRENT_LATCHES.MICROINSTRUCTION)){                        //18 and 19
