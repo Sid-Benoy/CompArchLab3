@@ -600,8 +600,6 @@ void eval_micro_sequencer() {
 
     if(GetIRD(CURRENT_LATCHES.MICROINSTRUCTION) == 1){
         NEXT_LATCHES.STATE_NUMBER = ((CURRENT_LATCHES.IR) >> 12) & 0xF;
-        printf("hi\n");
-        printf("%d\n", NEXT_LATCHES.STATE_NUMBER);
         memcpy(NEXT_LATCHES.MICROINSTRUCTION, CONTROL_STORE[NEXT_LATCHES.STATE_NUMBER], sizeof(int)*CONTROL_STORE_BITS);
     }
 
@@ -620,8 +618,6 @@ void eval_micro_sequencer() {
         if(CURRENT_LATCHES.READY == 1) {
             NEXT_LATCHES.READY = 0;
         }
-
-        printf("%d\n", CURRENT_LATCHES.READY);
     }
 
 
@@ -859,7 +855,7 @@ void latch_datapath_values() {
             }                                                                                    //puts MDR on bus, but one byte size the rest full
             else {
                 if(((((CURRENT_LATCHES.MDR) & 0x00FF) >> 7) & 0x1) == 1){
-                    NEXT_LATCHES.REGS[dest_reg] = (CURRENT_LATCHES.MDR & 0x00FF) | 0xFFFFFF00;      //31 and 27
+                    NEXT_LATCHES.REGS[dest_reg] = Low16bits((CURRENT_LATCHES.MDR & 0x00FF) | 0xFFFFFF00);      //31 and 27
                 }
                 else
                     NEXT_LATCHES.REGS[dest_reg] = CURRENT_LATCHES.MDR & 0x00FF;
@@ -882,9 +878,9 @@ void latch_datapath_values() {
         }
         else if(GetALUK(CURRENT_LATCHES.MICROINSTRUCTION) == 0x3){              //pass a, mdr gets sr sr[7:0]
             if(GetDATA_SIZE(CURRENT_LATCHES.MICROINSTRUCTION) == 1)
-                NEXT_LATCHES.REGS[dest_reg] = Low16bits(BUS);
+                NEXT_LATCHES.MDR = Low16bits(BUS);
             else
-                NEXT_LATCHES.REGS[dest_reg] = BUS & 0x00FF;
+                NEXT_LATCHES.MDR = BUS & 0x00FF;
         }
 
     }
@@ -913,28 +909,27 @@ void latch_datapath_values() {
                 NEXT_LATCHES.MDR = (MEMORY[CURRENT_LATCHES.MAR>>1][1] << 8) + MEMORY[CURRENT_LATCHES.MAR>>1][0];            //33 and 25
         }
         else
-            NEXT_LATCHES.MDR = (MEMORY[CURRENT_LATCHES.MAR >> 1][1] << 8) + ((MEMORY[CURRENT_LATCHES.MAR >> 1][0]) & 0x0);          //29
+            NEXT_LATCHES.MDR = (MEMORY[CURRENT_LATCHES.MAR >> 1][1] << 8) + ((MEMORY[CURRENT_LATCHES.MAR >> 1][0]) & 0xFFFE);          //29
     }
 
     if(GetMIO_EN(CURRENT_LATCHES.MICROINSTRUCTION) && GetR_W(CURRENT_LATCHES.MICROINSTRUCTION)) {               //write stb and stw
         if (GetDATA_SIZE(CURRENT_LATCHES.MICROINSTRUCTION)) {
-            MEMORY[CURRENT_LATCHES.MAR][1] = CURRENT_LATCHES.MDR & 0xFF00;
-            MEMORY[CURRENT_LATCHES.MAR][0] = CURRENT_LATCHES.MDR & 0x00FF;
+            MEMORY[CURRENT_LATCHES.MAR>>1][1] = (CURRENT_LATCHES.MDR & 0xFF00) >> 8;
+            MEMORY[CURRENT_LATCHES.MAR>>1][0] = CURRENT_LATCHES.MDR & 0x00FF;
         } else {
             if ((CURRENT_LATCHES.MAR & 0x1) == 1)
-                NEXT_LATCHES.REGS[CURRENT_LATCHES.MAR] = CURRENT_LATCHES.MDR & 0xFF00;
+                MEMORY[CURRENT_LATCHES.MAR>>1][1] = (CURRENT_LATCHES.MDR);
             else
-                NEXT_LATCHES.REGS[CURRENT_LATCHES.MAR] = CURRENT_LATCHES.MDR & 0x00FF;
+                MEMORY[CURRENT_LATCHES.MAR>>1][0] = CURRENT_LATCHES.MDR;
         }
     }
 
     //JSR
     if(GetPCMUX(CURRENT_LATCHES.MICROINSTRUCTION) == 0x2 && GetDRMUX(CURRENT_LATCHES.MICROINSTRUCTION)){                //state 20 and 21
         if(GetSR1MUX(CURRENT_LATCHES.MICROINSTRUCTION)) {
-            NEXT_LATCHES.REGS[0x7] = BUS;
             NEXT_LATCHES.PC = CURRENT_LATCHES.REGS[(CURRENT_LATCHES.IR >> 6) & 0x7];
         }else{
-            NEXT_LATCHES.REGS[0x7] = BUS;
+
             if(((CURRENT_LATCHES.IR >> 10) & 0x1) == 1){
                 NEXT_LATCHES.PC = CURRENT_LATCHES.PC + (((CURRENT_LATCHES.IR & 0x7FF) | 0xFFFFF800) << 1);
             }
@@ -942,6 +937,7 @@ void latch_datapath_values() {
                 NEXT_LATCHES.PC = CURRENT_LATCHES.PC + ((CURRENT_LATCHES.IR & 0x7FF) << 1);
             }
         }
+        NEXT_LATCHES.REGS[0x7] = Low16bits(CURRENT_LATCHES.PC);
     }
 
 
